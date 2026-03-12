@@ -10,22 +10,14 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
     """
     Observation space from Gymnasium (https://gymnasium.farama.org/api/spaces/)
     """
-    # The grid has (10, 10, 3) shape and can store values from 0 to 255 (uint8). To use the whole grid as the
-    # observation space, we can consider a MultiDiscrete space with values in the range [0, 256).
-    cell_values = env.grid + 256
-
-    # if MultiDiscrete is used, it's important to flatten() numpy arrays!
-    return gym.spaces.MultiDiscrete(cell_values.flatten())
-
-
-    # # The grid already stores uint8 RGB values in the range [0, 255], so a Box space matches the
-    # # flattened observation without needing arithmetic that overflows uint8 arrays.
-    # return gym.spaces.Box(
-    #     low=0,
-    #     high=255,
-    #     shape=env.grid.flatten().shape,
-    #     dtype=np.uint8,
-    # )
+    # The grid already stores uint8 RGB values in the range [0, 255], so a Box space matches the
+    # flattened observation without needing arithmetic that overflows uint8 arrays.
+    return gym.spaces.Box(
+        low=0,
+        high=255,
+        shape=env.grid.flatten().shape,
+        dtype=np.uint8,
+    )
 
 
 def observation(grid: np.ndarray):
