@@ -18,6 +18,16 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
     return gym.spaces.MultiDiscrete(cell_values.flatten())
 
 
+    # # The grid already stores uint8 RGB values in the range [0, 255], so a Box space matches the
+    # # flattened observation without needing arithmetic that overflows uint8 arrays.
+    # return gym.spaces.Box(
+    #     low=0,
+    #     high=255,
+    #     shape=env.grid.flatten().shape,
+    #     dtype=np.uint8,
+    # )
+
+
 def observation(grid: np.ndarray):
     """
     Function that returns the observation for the current state of the environment.
