@@ -5,12 +5,38 @@ import gymnasium as gym
 Feel free to modify the functions below and experiment with different environment configurations.
 """
 
+# MODIFY THIS FILE
+# use observation_space2, observation2, reward2 etc...
+
+
 # Choose which versions are active
 ACTIVE_OBSERVATION_SPACE = 1
 ACTIVE_OBSERVATION = 1
 ACTIVE_REWARD = 1
 
+# Cache real environment settingss
+CURRENT_GRID_SIZE = None
+CURRENT_ENEMY_FOV_DISTANCE = None
+DEFAULT_GRID_SIZE = 10
+DEFAULT_ENEMY_FOV_DISTANCE = 4
+
+
+def _get_env_constants():
+    grid_size = CURRENT_GRID_SIZE if CURRENT_GRID_SIZE is not None else DEFAULT_GRID_SIZE
+    enemy_fov_distance = (
+        CURRENT_ENEMY_FOV_DISTANCE
+        if CURRENT_ENEMY_FOV_DISTANCE is not None
+        else DEFAULT_ENEMY_FOV_DISTANCE
+    )
+    return grid_size, enemy_fov_distance
+
+
 def observation_space(env: gym.Env) -> gym.spaces.Space:
+    global CURRENT_GRID_SIZE, CURRENT_ENEMY_FOV_DISTANCE
+
+    CURRENT_GRID_SIZE = env.grid_size
+    CURRENT_ENEMY_FOV_DISTANCE = env.enemy_fov_distance
+
     if ACTIVE_OBSERVATION_SPACE == 0:
         return gym.spaces.Box(
             low=0,
@@ -56,7 +82,7 @@ def observation_space1(env: gym.Env) -> gym.spaces.Space:
 
 
 def observation1(grid: np.ndarray):
-    grid_size = grid.shape[0]  # grid is already (grid_size, grid_size, 3)
+    grid_size = grid.shape[0]
 
     simplified_grid = np.zeros((grid_size, grid_size), dtype=np.float32)
 
@@ -64,18 +90,18 @@ def observation1(grid: np.ndarray):
         for j in range(grid_size):
             cell = grid[i, j]
 
-            if (cell == [0, 0, 0]).all():          # unexplored
+            if (cell == [0, 0, 0]).all():
                 simplified_grid[i, j] = 0
-            elif (cell == [255, 255, 255]).all():  # explored
+            elif (cell == [255, 255, 255]).all():
                 simplified_grid[i, j] = 1
-            elif (cell == [101, 67, 33]).all():    # wall
+            elif (cell == [101, 67, 33]).all():
                 simplified_grid[i, j] = 2
-            elif (cell == [255, 0, 0]).all():      # danger
+            elif (cell == [255, 0, 0]).all():
                 simplified_grid[i, j] = 3
-            elif (cell == [255, 127, 127]).all():  # explored danger
+            elif (cell == [255, 127, 127]).all():
                 simplified_grid[i, j] = 4
             else:
-                simplified_grid[i, j] = 5  # agent or enemy
+                simplified_grid[i, j] = 5
 
     return simplified_grid.flatten()
 
@@ -87,12 +113,8 @@ def reward1(info: dict) -> float:
     game_over = info["game_over"]
     cells_remaining = info["cells_remaining"]
 
-    grid_size = 10
-    enemy_fov_distance = 4
-
-    agent_y = agent_pos // grid_size
-    agent_x = agent_pos % grid_size
-    agent_cell = (agent_y, agent_x)
+    grid_size, enemy_fov_distance = _get_env_constants()
+    agent_cell = divmod(agent_pos, grid_size)
 
     reward = 0.0
 
@@ -107,7 +129,6 @@ def reward1(info: dict) -> float:
     else:
         reward -= 0.5
 
-    # next-FOV penalty
     for enemy in enemies:
         next_orientation = (enemy.orientation + 1) % 4
 
