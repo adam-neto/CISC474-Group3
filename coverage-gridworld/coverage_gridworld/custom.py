@@ -1,63 +1,132 @@
-import numpy as np
+﻿import numpy as np
 import gymnasium as gym
 
 """
 Feel free to modify the functions below and experiment with different environment configurations.
 """
 
+# Choose which versions are active
+ACTIVE_OBSERVATION_SPACE = 1
+ACTIVE_OBSERVATION = 1
+ACTIVE_REWARD = 1
 
 def observation_space(env: gym.Env) -> gym.spaces.Space:
-    """
-    Observation space from Gymnasium (https://gymnasium.farama.org/api/spaces/)
-    """
-    # The grid already stores uint8 RGB values in the range [0, 255], so a Box space matches the
-    # flattened observation without needing arithmetic that overflows uint8 arrays.
-    return gym.spaces.Box(
-        low=0,
-        high=255,
-        shape=env.grid.flatten().shape,
-        dtype=np.uint8,
-    )
+    if ACTIVE_OBSERVATION_SPACE == 0:
+        return gym.spaces.Box(
+            low=0,
+            high=255,
+            shape=env.grid.flatten().shape,
+            dtype=np.uint8,
+        )
+    elif ACTIVE_OBSERVATION_SPACE == 1:
+        return observation_space1(env)
+    else:
+        raise ValueError(f"Unknown observation space version: {ACTIVE_OBSERVATION_SPACE}")
 
 
 def observation(grid: np.ndarray):
-    """
-    Function that returns the observation for the current state of the environment.
-    """
-    # If the observation returned is not the same shape as the observation_space, an error will occur!
-    # Make sure to make changes to both functions accordingly.
-
-    return grid.flatten()
+    if ACTIVE_OBSERVATION == 0:
+        return grid.flatten()
+    elif ACTIVE_OBSERVATION == 1:
+        return observation1(grid)
+    else:
+        raise ValueError(f"Unknown observation version: {ACTIVE_OBSERVATION}")
 
 
 def reward(info: dict) -> float:
-    """
-    Function to calculate the reward for the current step based on the state information.
+    if ACTIVE_REWARD == 0:
+        return 0
+    elif ACTIVE_REWARD == 1:
+        return reward1(info)
+    else:
+        raise ValueError(f"Unknown reward version: {ACTIVE_REWARD}")
 
-    The info dictionary has the following keys:
-    - enemies (list): list of `Enemy` objects. Each Enemy has the following attributes:
-        - x (int): column index,
-        - y (int): row index,
-        - orientation (int): orientation of the agent (LEFT = 0, DOWN = 1, RIGHT = 2, UP = 3),
-        - fov_cells (list): list of integer tuples indicating the coordinates of cells currently observed by the agent,
-    - agent_pos (int): agent position considering the flattened grid (e.g. cell `(2, 3)` corresponds to position `23`),
-    - total_covered_cells (int): how many cells have been covered by the agent so far,
-    - cells_remaining (int): how many cells are left to be visited in the current map layout,
-    - coverable_cells (int): how many cells can be covered in the current map layout,
-    - steps_remaining (int): steps remaining in the episode.
-    - new_cell_covered (bool): if a cell previously uncovered was covered on this step
-    - game_over (bool) : if the game was terminated because the player was seen by an enemy or not
-    """
+
+# JEREMY
+def observation_space1(env: gym.Env) -> gym.spaces.Space:
+    grid_size = env.grid_size
+    obs_size = grid_size * grid_size
+
+    return gym.spaces.Box(
+        low=0,
+        high=5,
+        shape=(obs_size,),
+        dtype=np.float32,
+    )
+
+
+def observation1(grid: np.ndarray):
+    grid_size = grid.shape[0]  # grid is already (grid_size, grid_size, 3)
+
+    simplified_grid = np.zeros((grid_size, grid_size), dtype=np.float32)
+
+    for i in range(grid_size):
+        for j in range(grid_size):
+            cell = grid[i, j]
+
+            if (cell == [0, 0, 0]).all():          # unexplored
+                simplified_grid[i, j] = 0
+            elif (cell == [255, 255, 255]).all():  # explored
+                simplified_grid[i, j] = 1
+            elif (cell == [101, 67, 33]).all():    # wall
+                simplified_grid[i, j] = 2
+            elif (cell == [255, 0, 0]).all():      # danger
+                simplified_grid[i, j] = 3
+            elif (cell == [255, 127, 127]).all():  # explored danger
+                simplified_grid[i, j] = 4
+            else:
+                simplified_grid[i, j] = 5  # agent or enemy
+
+    return simplified_grid.flatten()
+
+
+def reward1(info: dict) -> float:
     enemies = info["enemies"]
     agent_pos = info["agent_pos"]
-    total_covered_cells = info["total_covered_cells"]
-    cells_remaining = info["cells_remaining"]
-    coverable_cells = info["coverable_cells"]
-    steps_remaining = info["steps_remaining"]
     new_cell_covered = info["new_cell_covered"]
     game_over = info["game_over"]
+    cells_remaining = info["cells_remaining"]
 
-    # IMPORTANT: You may design a reward function that uses just some of these values. Experiment with different
-    # rewards and find out what works best for the algorithm you chose given the observation space you are using
+    grid_size = 10
+    enemy_fov_distance = 4
 
-    return 0
+    agent_y = agent_pos // grid_size
+    agent_x = agent_pos % grid_size
+    agent_cell = (agent_y, agent_x)
+
+    reward = 0.0
+
+    if game_over:
+        return -100.0
+
+    if cells_remaining == 0:
+        return 100.0
+
+    if new_cell_covered:
+        reward += 5.0
+    else:
+        reward -= 0.5
+
+    # next-FOV penalty
+    for enemy in enemies:
+        next_orientation = (enemy.orientation + 1) % 4
+
+        for i in range(1, enemy_fov_distance + 1):
+            if next_orientation == 0:
+                fy, fx = enemy.y, enemy.x - i
+            elif next_orientation == 1:
+                fy, fx = enemy.y + i, enemy.x
+            elif next_orientation == 2:
+                fy, fx = enemy.y, enemy.x + i
+            else:
+                fy, fx = enemy.y - i, enemy.x
+
+            if fy < 0 or fx < 0 or fy >= grid_size or fx >= grid_size:
+                break
+
+            if agent_cell == (fy, fx):
+                reward -= 10.0
+                break
+
+    reward -= 0.1
+    return reward
