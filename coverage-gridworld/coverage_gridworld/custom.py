@@ -14,7 +14,7 @@ ACTIVE_OBSERVATION_SPACE = 1
 ACTIVE_OBSERVATION = 1
 ACTIVE_REWARD = 1
 
-# Cache real environment settingss
+# Cache real environment settings
 CURRENT_GRID_SIZE = None
 CURRENT_ENEMY_FOV_DISTANCE = None
 DEFAULT_GRID_SIZE = 10
@@ -40,7 +40,7 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
         "enemy_fov_distance",
         DEFAULT_ENEMY_FOV_DISTANCE,
     )
-    
+
     if ACTIVE_OBSERVATION_SPACE == 0:
         return gym.spaces.Box(
             low=0,
@@ -166,7 +166,6 @@ def reward1(info: dict) -> float:
 
 
 # MONICA
-# YOU
 
 def observation_space2(env: gym.Env) -> gym.spaces.Space:
     # 5x5 local view centered on agent
