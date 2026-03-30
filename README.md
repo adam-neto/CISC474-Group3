@@ -7,7 +7,48 @@
 To install the environment, simply run: 
 
 ```bash
-pip install -e coverage-gridworld
+python3 -m pip install -e coverage-gridworld
+```
+
+For Stable Baselines3 training:
+
+```bash
+python3 -m pip install stable-baselines3 tensorboard
+```
+
+For rendered evaluation on Python 3.14:
+
+```bash
+brew install sdl2
+python3 -m pip install pygame
+```
+
+## Stable Baselines3
+
+The helper scripts live under `scripts/`.
+
+Train on a fixed map:
+
+```bash
+python3 scripts/train_sb3.py --env-id safe --total-timesteps 100000 --num-envs 4
+```
+
+Train on random maps:
+
+```bash
+python3 scripts/train_sb3.py --env-id standard --total-timesteps 300000 --num-envs 4
+```
+
+Evaluate a saved model:
+
+```bash
+python3 scripts/eval_sb3.py trained_agents/<run_name>/final_model --env-id sneaky_enemies --episodes 3
+```
+
+Render evaluation:
+
+```bash
+python3 scripts/eval_sb3.py trained_agents/<run_name>/final_model --env-id sneaky_enemies --episodes 3 --render --delay 0.15
 ```
 
 ## Rules
