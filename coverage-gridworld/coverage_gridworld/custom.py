@@ -50,6 +50,10 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
         )
     elif ACTIVE_OBSERVATION_SPACE == 1:
         return observation_space1(env)
+    
+    elif ACTIVE_OBSERVATION_SPACE == 2:
+        return observation_space2(env)
+
     else:
         raise ValueError(f"Unknown observation space version: {ACTIVE_OBSERVATION_SPACE}")
 
@@ -59,6 +63,8 @@ def observation(grid: np.ndarray):
         return grid.flatten()
     elif ACTIVE_OBSERVATION == 1:
         return observation1(grid)
+    elif ACTIVE_OBSERVATION == 2:
+        return observation2(grid)
     else:
         raise ValueError(f"Unknown observation version: {ACTIVE_OBSERVATION}")
 
@@ -68,6 +74,8 @@ def reward(info: dict) -> float:
         return 0
     elif ACTIVE_REWARD == 1:
         return reward1(info)
+    elif ACTIVE_REWARD == 2:
+        return reward2(info)
     else:
         raise ValueError(f"Unknown reward version: {ACTIVE_REWARD}")
 
@@ -155,3 +163,106 @@ def reward1(info: dict) -> float:
 
     reward -= 0.1
     return reward
+
+
+# MONICA
+# YOU
+
+def observation_space2(env: gym.Env) -> gym.spaces.Space:
+    # 5x5 local view centered on agent
+    return gym.spaces.Box(
+        low=0,
+        high=5,
+        shape=(25,),
+        dtype=np.float32,
+    )
+
+
+def observation2(grid: np.ndarray):
+    grid_size = grid.shape[0]
+
+    # find agent position (grey cell)
+    agent_pos = None
+    for i in range(grid_size):
+        for j in range(grid_size):
+            if (grid[i, j] == [160, 161, 161]).all():
+                agent_pos = (i, j)
+                break
+        if agent_pos:
+            break
+
+    # fallback (should not happen)
+    if agent_pos is None:
+        return np.zeros(25, dtype=np.float32)
+
+    ay, ax = agent_pos
+
+    # build 5x5 local window
+    local = np.zeros((5, 5), dtype=np.float32)
+
+    for dy in range(-2, 3):
+        for dx in range(-2, 3):
+            y = ay + dy
+            x = ax + dx
+
+            if 0 <= y < grid_size and 0 <= x < grid_size:
+                cell = grid[y, x]
+
+                if (cell == [0, 0, 0]).all():
+                    local[dy + 2, dx + 2] = 0
+                elif (cell == [255, 255, 255]).all():
+                    local[dy + 2, dx + 2] = 1
+                elif (cell == [101, 67, 33]).all():
+                    local[dy + 2, dx + 2] = 2
+                elif (cell == [255, 0, 0]).all():
+                    local[dy + 2, dx + 2] = 3
+                elif (cell == [255, 127, 127]).all():
+                    local[dy + 2, dx + 2] = 4
+                else:
+                    local[dy + 2, dx + 2] = 5
+            else:
+                local[dy + 2, dx + 2] = 2  # treat out-of-bounds as wall
+
+    return local.flatten()
+
+
+def reward2(info: dict) -> float:
+    enemies = info["enemies"]
+    agent_pos = info["agent_pos"]
+    new_cell_covered = info["new_cell_covered"]
+    game_over = info["game_over"]
+    cells_remaining = info["cells_remaining"]
+
+    grid_size, _ = _get_env_constants()
+    agent_cell = divmod(agent_pos, grid_size)
+
+    reward = 0.0
+
+    # death
+    if game_over:
+        return -100.0
+
+    # completion
+    if cells_remaining == 0:
+        return 150.0
+
+    # exploration
+    if new_cell_covered:
+        reward += 3.0
+    else:
+        reward -= 0.3  # penalize revisits
+
+    # proximity to enemies (Manhattan distance)
+    for enemy in enemies:
+        dist = abs(agent_cell[0] - enemy.y) + abs(agent_cell[1] - enemy.x)
+
+        if dist <= 2:
+            reward -= 1.0  # danger zone
+        else:
+            reward += 0.05  # safe movement bonus
+
+    # time penalty
+    reward -= 0.05
+
+    return reward
+
