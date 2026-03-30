@@ -1,6 +1,8 @@
 import random
 import time
 import gymnasium
+import sys
+sys.path.append("coverage_gridworld")
 import coverage_gridworld  # must be imported, even though it's not directly referenced
 
 
@@ -89,18 +91,21 @@ maps = [
     ]
 ]
 
-env = gymnasium.make("sneaky_enemies", render_mode="human", predefined_map_list=None, activate_game_status=True)
+env = gymnasium.make("sneaky_enemies", predefined_map_list=None, activate_game_status=True)
 num_episodes = 5
 
 for i in range(num_episodes):
-    env.reset()
+    obs, info = env.reset()
     done = False
-    while not done:
-        action = human_player()
-        obs, reward, done, truncated, info = env.step(action)
+    truncated = False
+    total_reward = 0
 
-        # Sleep may be used to allow each step to be visualized. Value can be changed
-        #time.sleep(0.2)
-    if done:
-        time.sleep(2)
-env.close()
+    while not done and not truncated:
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, done, truncated, info = env.step(action)
+        total_reward += reward
+        time.sleep(0.2)
+
+    print(f"Episode {i+1}: reward = {total_reward}")
+    
+    env.close()

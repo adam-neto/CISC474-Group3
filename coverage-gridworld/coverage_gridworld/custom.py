@@ -35,7 +35,7 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
     global CURRENT_GRID_SIZE, CURRENT_ENEMY_FOV_DISTANCE
 
     CURRENT_GRID_SIZE = env.grid_size
-    CURRENT_ENEMY_FOV_DISTANCE = env.enemy_fov_distance
+    CURRENT_ENEMY_FOV_DISTANCE = DEFAULT_ENEMY_FOV_DISTANCE   
 
     if ACTIVE_OBSERVATION_SPACE == 0:
         return gym.spaces.Box(
@@ -69,13 +69,14 @@ def reward(info: dict) -> float:
 
 
 # JEREMY
+
 def observation_space1(env: gym.Env) -> gym.spaces.Space:
     grid_size = env.grid_size
     obs_size = grid_size * grid_size
 
     return gym.spaces.Box(
         low=0,
-        high=5,
+        high=6,
         shape=(obs_size,),
         dtype=np.float32,
     )
@@ -83,25 +84,26 @@ def observation_space1(env: gym.Env) -> gym.spaces.Space:
 
 def observation1(grid: np.ndarray):
     grid_size = grid.shape[0]
-
     simplified_grid = np.zeros((grid_size, grid_size), dtype=np.float32)
 
     for i in range(grid_size):
         for j in range(grid_size):
             cell = grid[i, j]
 
-            if (cell == [0, 0, 0]).all():
+            if (cell == [0, 0, 0]).all():              # black
                 simplified_grid[i, j] = 0
-            elif (cell == [255, 255, 255]).all():
+            elif (cell == [255, 255, 255]).all():      # white
                 simplified_grid[i, j] = 1
-            elif (cell == [101, 67, 33]).all():
+            elif (cell == [101, 67, 33]).all():        # wall
                 simplified_grid[i, j] = 2
-            elif (cell == [255, 0, 0]).all():
+            elif (cell == [255, 0, 0]).all():          # red
                 simplified_grid[i, j] = 3
-            elif (cell == [255, 127, 127]).all():
+            elif (cell == [255, 127, 127]).all():      # light red
                 simplified_grid[i, j] = 4
-            else:
+            elif (cell == [160, 161, 161]).all():      # agent grey
                 simplified_grid[i, j] = 5
+            elif (cell == [31, 198, 0]).all():         # enemy green
+                simplified_grid[i, j] = 6
 
     return simplified_grid.flatten()
 
@@ -122,12 +124,12 @@ def reward1(info: dict) -> float:
         return -100.0
 
     if cells_remaining == 0:
-        return 100.0
+        return 200.0
 
     if new_cell_covered:
         reward += 5.0
     else:
-        reward -= 0.5
+        reward -= 1.0
 
     for enemy in enemies:
         next_orientation = (enemy.orientation + 1) % 4
@@ -146,8 +148,8 @@ def reward1(info: dict) -> float:
                 break
 
             if agent_cell == (fy, fx):
-                reward -= 10.0
+                reward -= 0.5
                 break
 
-    reward -= 0.1
+    reward -= 0.01
     return reward
