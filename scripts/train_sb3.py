@@ -25,6 +25,18 @@ def parse_args():
     )
     parser.add_argument("--env-id", default="standard", help="Gymnasium environment ID to train on.")
     parser.add_argument(
+        "--observation-version",
+        type=int,
+        default=custom.ACTIVE_OBSERVATION,
+        help="Observation version to activate from custom.py.",
+    )
+    parser.add_argument(
+        "--reward-version",
+        type=int,
+        default=custom.ACTIVE_REWARD,
+        help="Reward version to activate from custom.py.",
+    )
+    parser.add_argument(
         "--eval-env-id",
         default=None,
         help="Environment ID used during evaluation. Defaults to the training environment.",
@@ -99,6 +111,12 @@ def parse_args():
     return parser.parse_args()
 
 
+def configure_custom_versions(args):
+    custom.ACTIVE_OBSERVATION_SPACE = args.observation_version
+    custom.ACTIVE_OBSERVATION = args.observation_version
+    custom.ACTIVE_REWARD = args.reward_version
+
+
 def make_run_dir(save_dir: str, env_id: str, run_name: str | None) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     resolved_name = run_name or f"ppo_{env_id}_{timestamp}"
@@ -126,6 +144,7 @@ def save_run_metadata(run_dir: Path, args):
 
 def main():
     args = parse_args()
+    configure_custom_versions(args)
     eval_env_id = args.eval_env_id or args.env_id
     run_dir = make_run_dir(args.save_dir, args.env_id, args.run_name)
     tb_dir = run_dir / "tensorboard"
