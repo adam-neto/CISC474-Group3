@@ -166,7 +166,6 @@ def reward1(info: dict) -> float:
 
 
 # MONICA
-# YOU
 
 def observation_space2(env: gym.Env) -> gym.spaces.Space:
     # 5x5 local view centered on agent
