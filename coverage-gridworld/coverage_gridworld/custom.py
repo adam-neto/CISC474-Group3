@@ -35,8 +35,12 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
     global CURRENT_GRID_SIZE, CURRENT_ENEMY_FOV_DISTANCE
 
     CURRENT_GRID_SIZE = env.grid_size
-    CURRENT_ENEMY_FOV_DISTANCE = env.enemy_fov_distance
-
+    CURRENT_ENEMY_FOV_DISTANCE = getattr(
+        env,
+        "enemy_fov_distance",
+        DEFAULT_ENEMY_FOV_DISTANCE,
+    )
+    
     if ACTIVE_OBSERVATION_SPACE == 0:
         return gym.spaces.Box(
             low=0,
