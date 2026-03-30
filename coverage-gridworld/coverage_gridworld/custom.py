@@ -266,3 +266,73 @@ def reward2(info: dict) -> float:
 
     return reward
 
+def observation3(grid: np.ndarray):
+    grid_size = grid.shape[0]
+    simplified_grid = np.zeros((grid_size, grid_size), dtype=np.float32)
+
+    for i in range(grid_size):
+        for j in range(grid_size):
+            cell = grid[i, j]
+
+            if (cell == [0, 0, 0]).all():              # black
+                simplified_grid[i, j] = 0
+            elif (cell == [255, 255, 255]).all():      # white
+                simplified_grid[i, j] = 1
+            elif (cell == [101, 67, 33]).all():        # wall
+                simplified_grid[i, j] = 2
+            elif (cell == [255, 0, 0]).all():          # red
+                simplified_grid[i, j] = 3
+            elif (cell == [255, 127, 127]).all():      # light red
+                simplified_grid[i, j] = 4
+            elif (cell == [160, 161, 161]).all():      # agent grey
+                simplified_grid[i, j] = 5
+            elif (cell == [31, 198, 0]).all():         # enemy green
+                simplified_grid[i, j] = 6
+
+    return simplified_grid.flatten()
+
+def reward3(info: dict) -> float:
+    enemies = info["enemies"]
+    agent_pos = info["agent_pos"]
+    new_cell_covered = info["new_cell_covered"]
+    game_over = info["game_over"]
+    cells_remaining = info["cells_remaining"]
+
+    grid_size, enemy_fov_distance = _get_env_constants()
+    agent_cell = divmod(agent_pos, grid_size)
+
+    reward = 0.0
+
+    if game_over:
+        return -100.0
+
+    if cells_remaining == 0:
+        return 200.0
+
+    if new_cell_covered:
+        reward += 5.0
+    else:
+        reward -= 1.0
+
+    for enemy in enemies:
+        next_orientation = (enemy.orientation + 1) % 4
+
+        for i in range(1, enemy_fov_distance + 1):
+            if next_orientation == 0:
+                fy, fx = enemy.y, enemy.x - i
+            elif next_orientation == 1:
+                fy, fx = enemy.y + i, enemy.x
+            elif next_orientation == 2:
+                fy, fx = enemy.y, enemy.x + i
+            else:
+                fy, fx = enemy.y - i, enemy.x
+
+            if fy < 0 or fx < 0 or fy >= grid_size or fx >= grid_size:
+                break
+
+            if agent_cell == (fy, fx):
+                reward -= 0.5
+                break
+
+    reward -= 0.01
+    return reward
