@@ -1,35 +1,56 @@
 ﻿import numpy as np
 import gymnasium as gym
-
-"""
-Feel free to modify the functions below and experiment with different environment configurations.
-"""
-
-# MODIFY THIS FILE
-# use observation_space2, observation2, reward2 etc...
-
+from dataclasses import dataclass
 
 # Choose which versions are active
 ACTIVE_OBSERVATION_SPACE = 1
 ACTIVE_OBSERVATION = 1
 ACTIVE_REWARD = 1
 
-# Cache real environment settings
-CURRENT_GRID_SIZE = None
-CURRENT_ENEMY_FOV_DISTANCE = None
+# Default environement variables
 DEFAULT_GRID_SIZE = 10
 DEFAULT_ENEMY_FOV_DISTANCE = 4
 
 
-def _get_env_constants():
-    grid_size = CURRENT_GRID_SIZE if CURRENT_GRID_SIZE is not None else DEFAULT_GRID_SIZE
-    enemy_fov_distance = (
-        CURRENT_ENEMY_FOV_DISTANCE
-        if CURRENT_ENEMY_FOV_DISTANCE is not None
-        else DEFAULT_ENEMY_FOV_DISTANCE
-    )
-    return grid_size, enemy_fov_distance
+# Helper functions
+@dataclass(frozen=True)
+class EnvConstants:
+    grid_size: int
+    enemy_fov_distance: int
 
+
+def get_env_constants(env: gym.Env | None = None, info: dict | None = None) -> EnvConstants:
+    """
+    Resolve environment constants from the environment or info dict.
+
+    Priority:
+    1. env attributes
+    2. info dictionary values
+    3. module defaults
+    """
+    if env is not None:
+        return EnvConstants(
+            grid_size=getattr(env, "grid_size", DEFAULT_GRID_SIZE),
+            enemy_fov_distance=getattr(
+                env,
+                "enemy_fov_distance",
+                DEFAULT_ENEMY_FOV_DISTANCE,
+            ),
+        )
+
+    if info is not None:
+        return EnvConstants(
+            grid_size=info.get("grid_size", DEFAULT_GRID_SIZE),
+            enemy_fov_distance=info.get(
+                "enemy_fov_distance",
+                DEFAULT_ENEMY_FOV_DISTANCE,
+            ),
+        )
+
+    return EnvConstants(
+        grid_size=DEFAULT_GRID_SIZE,
+        enemy_fov_distance=DEFAULT_ENEMY_FOV_DISTANCE,
+    )
 
 def observation_space(env: gym.Env) -> gym.spaces.Space:
     global CURRENT_GRID_SIZE, CURRENT_ENEMY_FOV_DISTANCE
@@ -85,41 +106,33 @@ def reward(info: dict) -> float:
         raise ValueError(f"Unknown reward version: {ACTIVE_REWARD}")
 
 
+
 # JEREMY
 
 def observation_space1(env: gym.Env) -> gym.spaces.Space:
-    grid_size = env.grid_size
-    obs_size = grid_size * grid_size
-
     return gym.spaces.Box(
         low=0,
         high=5,
-        shape=(obs_size,),
+        shape=(env.grid_size * env.grid_size,),
         dtype=np.float32,
     )
 
 
 def observation1(grid: np.ndarray):
-    grid_size = grid.shape[0]
+    color_map = {
+        (0, 0, 0): 0,          # empty / uncovered
+        (255, 255, 255): 1,    # covered
+        (101, 67, 33): 2,      # wall
+        (255, 0, 0): 3,        # enemy FOV / danger
+        (255, 127, 127): 4,    # lighter danger
+    }
 
+    grid_size = grid.shape[0]
     simplified_grid = np.zeros((grid_size, grid_size), dtype=np.float32)
 
     for i in range(grid_size):
         for j in range(grid_size):
-            cell = grid[i, j]
-
-            if (cell == [0, 0, 0]).all():
-                simplified_grid[i, j] = 0
-            elif (cell == [255, 255, 255]).all():
-                simplified_grid[i, j] = 1
-            elif (cell == [101, 67, 33]).all():
-                simplified_grid[i, j] = 2
-            elif (cell == [255, 0, 0]).all():
-                simplified_grid[i, j] = 3
-            elif (cell == [255, 127, 127]).all():
-                simplified_grid[i, j] = 4
-            else:
-                simplified_grid[i, j] = 5
+            simplified_grid[i, j] = color_map.get(tuple(grid[i, j]), 5)
 
     return simplified_grid.flatten()
 
@@ -131,10 +144,10 @@ def reward1(info: dict) -> float:
     game_over = info["game_over"]
     cells_remaining = info["cells_remaining"]
 
-    grid_size, enemy_fov_distance = _get_env_constants()
+    constants = get_env_constants(info=info)
+    grid_size = constants.grid_size
+    enemy_fov_distance = constants.enemy_fov_distance
     agent_cell = divmod(agent_pos, grid_size)
-
-    reward = 0.0
 
     if game_over:
         return -100.0
@@ -142,23 +155,23 @@ def reward1(info: dict) -> float:
     if cells_remaining == 0:
         return 100.0
 
-    if new_cell_covered:
-        reward += 5.0
-    else:
-        reward -= 0.5
+    reward = 5.0 if new_cell_covered else -0.5
 
     for enemy in enemies:
-        next_orientation = (enemy.orientation + 1) % 4
+        direction = (enemy.orientation + 1) % 4
 
-        for i in range(1, enemy_fov_distance + 1):
-            if next_orientation == 0:
-                fy, fx = enemy.y, enemy.x - i
-            elif next_orientation == 1:
-                fy, fx = enemy.y + i, enemy.x
-            elif next_orientation == 2:
-                fy, fx = enemy.y, enemy.x + i
-            else:
-                fy, fx = enemy.y - i, enemy.x
+        if direction == 0:      # left
+            dy, dx = 0, -1
+        elif direction == 1:    # down
+            dy, dx = 1, 0
+        elif direction == 2:    # right
+            dy, dx = 0, 1
+        else:                   # up
+            dy, dx = -1, 0
+
+        for step in range(1, enemy_fov_distance + 1):
+            fy = enemy.y + dy * step
+            fx = enemy.x + dx * step
 
             if fy < 0 or fx < 0 or fy >= grid_size or fx >= grid_size:
                 break
@@ -169,6 +182,7 @@ def reward1(info: dict) -> float:
 
     reward -= 0.1
     return reward
+
 
 
 # MONICA
@@ -238,7 +252,8 @@ def reward2(info: dict) -> float:
     game_over = info["game_over"]
     cells_remaining = info["cells_remaining"]
 
-    grid_size, _ = _get_env_constants()
+    constants = get_env_constants(info=info)
+    grid_size = constants.grid_size
     agent_cell = divmod(agent_pos, grid_size)
 
     reward = 0.0
@@ -270,6 +285,7 @@ def reward2(info: dict) -> float:
     reward -= 0.05
 
     return reward
+
 
 
 # ENQI
@@ -319,7 +335,9 @@ def reward3(info: dict) -> float:
     game_over = info["game_over"]
     cells_remaining = info["cells_remaining"]
 
-    grid_size, enemy_fov_distance = _get_env_constants()
+    constants = get_env_constants(info=info)
+    grid_size = constants.grid_size
+    enemy_fov_distance = constants.enemy_fov_distance
     agent_cell = divmod(agent_pos, grid_size)
 
     reward = 0.0
