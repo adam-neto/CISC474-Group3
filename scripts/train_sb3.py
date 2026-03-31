@@ -13,10 +13,6 @@ if str(LOCAL_PACKAGE_ROOT) not in sys.path:
 
 import coverage_gridworld  # noqa: F401 - registers the env IDs with Gymnasium
 from coverage_gridworld import custom
-from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.monitor import Monitor
 
 
 def parse_args():
@@ -28,7 +24,7 @@ def parse_args():
         "--observation-version",
         type=int,
         default=custom.ACTIVE_OBSERVATION,
-        help="Observation version to activate from custom.py.",
+        help="Observation version to activate from custom.py. This selects both observation_spaceX and observationX.",
     )
     parser.add_argument(
         "--reward-version",
@@ -108,10 +104,26 @@ def parse_args():
         action="store_true",
         help="Show the SB3 progress bar. This may require extra optional dependencies.",
     )
+    parser.add_argument(
+        "--list-versions",
+        action="store_true",
+        help="Print the available observation/reward versions from custom.py and exit.",
+    )
     return parser.parse_args()
 
 
 def configure_custom_versions(args):
+    if (
+        not hasattr(custom, f"observation_space{args.observation_version}")
+        or not hasattr(custom, f"observation{args.observation_version}")
+    ):
+        raise ValueError(
+            f"Observation version {args.observation_version} is not implemented in custom.py."
+        )
+
+    if args.reward_version != 0 and not hasattr(custom, f"reward{args.reward_version}"):
+        raise ValueError(f"Reward version {args.reward_version} is not implemented in custom.py.")
+
     custom.ACTIVE_OBSERVATION_SPACE = args.observation_version
     custom.ACTIVE_OBSERVATION = args.observation_version
     custom.ACTIVE_REWARD = args.reward_version
@@ -144,7 +156,35 @@ def save_run_metadata(run_dir: Path, args):
 
 def main():
     args = parse_args()
+    if args.list_versions:
+        available_observations = [
+            version
+            for version in range(10)
+            if version == 0
+            or (
+                hasattr(custom, f"observation_space{version}")
+                and hasattr(custom, f"observation{version}")
+            )
+        ]
+        available_rewards = [
+            version for version in range(10) if version == 0 or hasattr(custom, f"reward{version}")
+        ]
+        print(f"Available observation versions: {available_observations}")
+        print(f"Available reward versions: {available_rewards}")
+        return
+
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
+    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.monitor import Monitor
+
     configure_custom_versions(args)
+    print(
+        "Configured custom.py settings:",
+        f"observation_space={custom.ACTIVE_OBSERVATION_SPACE},",
+        f"observation={custom.ACTIVE_OBSERVATION},",
+        f"reward={custom.ACTIVE_REWARD}",
+    )
     eval_env_id = args.eval_env_id or args.env_id
     run_dir = make_run_dir(args.save_dir, args.env_id, args.run_name)
     tb_dir = run_dir / "tensorboard"
@@ -200,12 +240,6 @@ def main():
     )
 
     print(f"Training PPO on '{args.env_id}' with {args.num_envs} parallel environments.")
-    print(
-        "Using custom.py settings:",
-        f"observation_space={custom.ACTIVE_OBSERVATION_SPACE},",
-        f"observation={custom.ACTIVE_OBSERVATION},",
-        f"reward={custom.ACTIVE_REWARD}",
-    )
     print(f"Run artifacts will be saved to: {run_dir}")
 
     model.learn(
