@@ -16,9 +16,9 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 
 
-custom.ACTIVE_OBSERVATION_SPACE = 2
-custom.ACTIVE_OBSERVATION = 2
-custom.ACTIVE_REWARD = 3
+custom.ACTIVE_OBSERVATION_SPACE = 1
+custom.ACTIVE_OBSERVATION = 1
+custom.ACTIVE_REWARD = 1
 
 
 def train():
@@ -27,9 +27,12 @@ def train():
     n_envs = 4 
     
     train_env = make_vec_env(
-        env_id, 
-        n_envs=n_envs, 
-        env_kwargs={"render_mode": None, "predefined_map_list": None}
+        env_id,
+        n_envs=n_envs,
+        env_kwargs={
+            "render_mode": None,
+            "predefined_map_list": None,
+        }
     )
 
     # PPO Optimized for CPU & Local Observation
@@ -46,9 +49,9 @@ def train():
     )
 
     print("Training the agent on CPU.")
-    model.learn(total_timesteps=200_000)
+    model.learn(total_timesteps=20_000)
     
-    model.save("best_agent_cpu")
+    model.save("best_agent_v1")
     print("Completed. Saved as 'best_agent_v1.zip'")
 
 if __name__ == "__main__":
@@ -56,4 +59,4 @@ if __name__ == "__main__":
 
 
 # RUN WITH 
-# python scripts/eval_sb3.py best_agent_v1.zip --observation-version 2 --reward-version 3 --render
+# python scripts/eval_sb3.py best_agent_v1.zip --observation-version 1 --reward-version 1 --render --episodes 50 --map-index 2

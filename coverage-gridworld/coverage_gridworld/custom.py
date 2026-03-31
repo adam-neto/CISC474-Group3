@@ -137,50 +137,108 @@ def observation1(grid: np.ndarray):
     return simplified_grid.flatten()
 
 
+from collections import deque
+
 def reward1(info: dict) -> float:
     enemies = info["enemies"]
     agent_pos = info["agent_pos"]
+    prev_agent_pos = info.get("prev_agent_pos", agent_pos)
+    prev_prev_agent_pos = info.get("prev_prev_agent_pos", prev_agent_pos)
+
     new_cell_covered = info["new_cell_covered"]
     game_over = info["game_over"]
     cells_remaining = info["cells_remaining"]
+    visited_matrix = info.get("visited_matrix")
+    stagnation_steps = info.get("stagnation_steps", 0)
 
     constants = get_env_constants(info=info)
     grid_size = constants.grid_size
     enemy_fov_distance = constants.enemy_fov_distance
+
     agent_cell = divmod(agent_pos, grid_size)
+    prev_agent_cell = divmod(prev_agent_pos, grid_size)
+    prev_prev_agent_cell = divmod(prev_prev_agent_pos, grid_size)
 
     if game_over:
-        return -100.0
-
+        return -30.0
     if cells_remaining == 0:
         return 100.0
 
-    reward = 5.0 if new_cell_covered else -0.5
+    directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]
 
-    for enemy in enemies:
-        direction = (enemy.orientation + 1) % 4
+    def in_bounds(y, x):
+        return 0 <= y < grid_size and 0 <= x < grid_size
 
-        if direction == 0:      # left
-            dy, dx = 0, -1
-        elif direction == 1:    # down
-            dy, dx = 1, 0
-        elif direction == 2:    # right
-            dy, dx = 0, 1
-        else:                   # up
-            dy, dx = -1, 0
+    def get_fov_cells():
+        fov = set()
+        for enemy in enemies:
+            idx = enemy.orientation
+            dy, dx = directions[idx]
 
-        for step in range(1, enemy_fov_distance + 1):
-            fy = enemy.y + dy * step
-            fx = enemy.x + dx * step
+            for step in range(1, enemy_fov_distance + 1):
+                fy = enemy.y + dy * step
+                fx = enemy.x + dx * step
+                if not in_bounds(fy, fx):
+                    break
+                fov.add((fy, fx))
+        return fov
 
-            if fy < 0 or fx < 0 or fy >= grid_size or fx >= grid_size:
-                break
+    def nearest_unvisited_distance(start):
+        if visited_matrix is None:
+            return 0
 
-            if agent_cell == (fy, fx):
-                reward -= 10.0
-                break
+        sy, sx = start
+        q = deque([(sy, sx, 0)])
+        seen = {(sy, sx)}
 
-    reward -= 0.1
+        while q:
+            y, x, d = q.popleft()
+
+            if visited_matrix[y][x] == 0:
+                return d
+
+            for dy, dx in directions:
+                ny, nx = y + dy, x + dx
+                if in_bounds(ny, nx) and (ny, nx) not in seen:
+                    seen.add((ny, nx))
+                    q.append((ny, nx, d + 1))
+
+        return 0
+
+    reward = 0.0
+    fov_cells = get_fov_cells()
+
+    moved = agent_pos != prev_agent_pos
+    curr_in_fov = agent_cell in fov_cells
+    prev_in_fov = prev_agent_cell in fov_cells
+
+    curr_dist = nearest_unvisited_distance(agent_cell)
+    prev_dist = nearest_unvisited_distance(prev_agent_cell)
+
+    if new_cell_covered:
+        reward += 10.0
+
+    dist_improvement = prev_dist - curr_dist
+    if dist_improvement > 0:
+        reward += 1.5 * dist_improvement
+
+    if not moved:
+        reward -= 2.0 + 0.5 * stagnation_steps
+
+    if agent_pos == prev_prev_agent_pos and agent_pos != prev_agent_pos:
+        reward -= 3.0
+
+    if visited_matrix is not None:
+        times_visited = visited_matrix[agent_cell]
+        reward -= min(2.5, 0.35 * times_visited)
+
+    if curr_in_fov:
+        reward -= 2.5
+    if prev_in_fov and not curr_in_fov:
+        reward += 1.5
+
+    reward -= 0.05
+
     return reward
 
 
