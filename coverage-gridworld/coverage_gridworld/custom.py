@@ -50,9 +50,10 @@ def observation_space(env: gym.Env) -> gym.spaces.Space:
         )
     elif ACTIVE_OBSERVATION_SPACE == 1:
         return observation_space1(env)
-    
     elif ACTIVE_OBSERVATION_SPACE == 2:
         return observation_space2(env)
+    elif ACTIVE_OBSERVATION_SPACE == 3:
+        return observation_space3(env)
 
     else:
         raise ValueError(f"Unknown observation space version: {ACTIVE_OBSERVATION_SPACE}")
