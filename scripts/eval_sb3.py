@@ -88,21 +88,24 @@ def configure_custom_versions(args):
     custom.ACTIVE_REWARD = args.reward_version
 
 
+def available_versions():
+    observations = [
+        version
+        for version in range(10)
+        if version == 0
+        or (
+            hasattr(custom, f"observation_space{version}")
+            and hasattr(custom, f"observation{version}")
+        )
+    ]
+    rewards = [version for version in range(10) if version == 0 or hasattr(custom, f"reward{version}")]
+    return observations, rewards
+
+
 def main():
     args = parse_args()
     if args.list_versions:
-        available_observations = [
-            version
-            for version in range(10)
-            if version == 0
-            or (
-                hasattr(custom, f"observation_space{version}")
-                and hasattr(custom, f"observation{version}")
-            )
-        ]
-        available_rewards = [
-            version for version in range(10) if version == 0 or hasattr(custom, f"reward{version}")
-        ]
+        available_observations, available_rewards = available_versions()
         print(f"Available observation versions: {available_observations}")
         print(f"Available reward versions: {available_rewards}")
         return
@@ -145,8 +148,12 @@ def main():
         if coverable_cells:
             coverage = 100.0 * total_covered_cells / coverable_cells
 
-        steps_left = final_info.get("steps_remaining", 0)
-        game_over = final_info.get("game_over", False)
+        steps_left = int(final_info.get("steps_remaining", 0))
+        game_over = bool(final_info.get("game_over", False))
+        coverable_cells = int(coverable_cells)
+        total_covered_cells = int(total_covered_cells)
+        coverage = float(coverage)
+        episode_reward = float(episode_reward)
         completed = coverable_cells > 0 and total_covered_cells == coverable_cells
         timed_out = steps_left == 0 and not game_over and not completed
 
@@ -190,11 +197,11 @@ def main():
             "episodes": args.episodes,
             "seed": args.seed,
             "summary": {
-                "mean_reward": mean_reward,
-                "mean_coverage": mean_coverage,
-                "completion_rate": completion_rate,
-                "death_rate": death_rate,
-                "timeout_rate": timeout_rate,
+                "mean_reward": float(mean_reward),
+                "mean_coverage": float(mean_coverage),
+                "completion_rate": float(completion_rate),
+                "death_rate": float(death_rate),
+                "timeout_rate": float(timeout_rate),
             },
             "episodes_detail": episode_summaries,
         }

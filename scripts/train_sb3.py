@@ -4,8 +4,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import gymnasium as gym
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_PACKAGE_ROOT = PROJECT_ROOT / "coverage-gridworld"
 if str(LOCAL_PACKAGE_ROOT) not in sys.path:
@@ -31,11 +29,6 @@ def parse_args():
         type=int,
         default=custom.ACTIVE_REWARD,
         help="Reward version to activate from custom.py.",
-    )
-    parser.add_argument(
-        "--eval-env-id",
-        default=None,
-        help="Environment ID used during evaluation. Defaults to the training environment.",
     )
     parser.add_argument(
         "--total-timesteps",
@@ -71,18 +64,6 @@ def parse_args():
     parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor.")
     parser.add_argument("--gae-lambda", type=float, default=0.95, help="GAE lambda.")
     parser.add_argument("--ent-coef", type=float, default=0.01, help="Entropy bonus coefficient.")
-    parser.add_argument(
-        "--eval-freq",
-        type=int,
-        default=25_000,
-        help="Evaluate every N timesteps.",
-    )
-    parser.add_argument(
-        "--eval-episodes",
-        type=int,
-        default=5,
-        help="Number of evaluation episodes per evaluation run.",
-    )
     parser.add_argument(
         "--checkpoint-freq",
         type=int,
@@ -129,19 +110,26 @@ def configure_custom_versions(args):
     custom.ACTIVE_REWARD = args.reward_version
 
 
+def available_versions():
+    observations = [
+        version
+        for version in range(10)
+        if version == 0
+        or (
+            hasattr(custom, f"observation_space{version}")
+            and hasattr(custom, f"observation{version}")
+        )
+    ]
+    rewards = [version for version in range(10) if version == 0 or hasattr(custom, f"reward{version}")]
+    return observations, rewards
+
+
 def make_run_dir(save_dir: str, env_id: str, run_name: str | None) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     resolved_name = run_name or f"ppo_{env_id}_{timestamp}"
     run_dir = Path(save_dir) / resolved_name
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
-
-
-def build_env_kwargs():
-    return {
-        "render_mode": None,
-        "predefined_map_list": None,
-    }
 
 
 def save_run_metadata(run_dir: Path, args):
@@ -157,24 +145,13 @@ def save_run_metadata(run_dir: Path, args):
 def main():
     args = parse_args()
     if args.list_versions:
-        available_observations = [
-            version
-            for version in range(10)
-            if version == 0
-            or (
-                hasattr(custom, f"observation_space{version}")
-                and hasattr(custom, f"observation{version}")
-            )
-        ]
-        available_rewards = [
-            version for version in range(10) if version == 0 or hasattr(custom, f"reward{version}")
-        ]
+        available_observations, available_rewards = available_versions()
         print(f"Available observation versions: {available_observations}")
         print(f"Available reward versions: {available_rewards}")
         return
 
     from stable_baselines3 import PPO
-    from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
+    from stable_baselines3.common.callbacks import CheckpointCallback
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.monitor import Monitor
 
@@ -185,37 +162,22 @@ def main():
         f"observation={custom.ACTIVE_OBSERVATION},",
         f"reward={custom.ACTIVE_REWARD}",
     )
-    eval_env_id = args.eval_env_id or args.env_id
     run_dir = make_run_dir(args.save_dir, args.env_id, args.run_name)
     tb_dir = run_dir / "tensorboard"
     checkpoints_dir = run_dir / "checkpoints"
-    best_model_dir = run_dir / "best_model"
-    eval_logs_dir = run_dir / "eval_logs"
 
-    for directory in (tb_dir, checkpoints_dir, best_model_dir, eval_logs_dir):
+    for directory in (tb_dir, checkpoints_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
     save_run_metadata(run_dir, args)
 
-    env_kwargs = build_env_kwargs()
+    env_kwargs = {"render_mode": None, "predefined_map_list": None}
     vec_env = make_vec_env(
         args.env_id,
         n_envs=args.num_envs,
         seed=args.seed,
         env_kwargs=env_kwargs,
         wrapper_class=Monitor,
-    )
-
-    eval_env = Monitor(gym.make(eval_env_id, **env_kwargs))
-
-    eval_callback = EvalCallback(
-        eval_env,
-        best_model_save_path=str(best_model_dir),
-        log_path=str(eval_logs_dir),
-        eval_freq=max(args.eval_freq // args.num_envs, 1),
-        n_eval_episodes=args.eval_episodes,
-        deterministic=True,
-        render=False,
     )
 
     checkpoint_callback = CheckpointCallback(
@@ -244,7 +206,7 @@ def main():
 
     model.learn(
         total_timesteps=args.total_timesteps,
-        callback=[eval_callback, checkpoint_callback],
+        callback=checkpoint_callback,
         progress_bar=args.progress_bar,
     )
 
@@ -252,7 +214,6 @@ def main():
     model.save(str(final_model_path))
     print(f"Final model saved to: {final_model_path}.zip")
 
-    eval_env.close()
     vec_env.close()
 
 
