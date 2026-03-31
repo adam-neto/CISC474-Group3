@@ -65,6 +65,8 @@ def observation(grid: np.ndarray):
         return observation1(grid)
     elif ACTIVE_OBSERVATION == 2:
         return observation2(grid)
+    elif ACTIVE_OBSERVATION == 3:
+        return observation3(grid)
     else:
         raise ValueError(f"Unknown observation version: {ACTIVE_OBSERVATION}")
 
@@ -76,6 +78,8 @@ def reward(info: dict) -> float:
         return reward1(info)
     elif ACTIVE_REWARD == 2:
         return reward2(info)
+    elif ACTIVE_REWARD == 3:
+        return reward3(info)
     else:
         raise ValueError(f"Unknown reward version: {ACTIVE_REWARD}")
 
