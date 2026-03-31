@@ -27,29 +27,54 @@ python3 -m pip install pygame
 
 The helper scripts live under `scripts/`.
 
+List the currently available observation and reward versions:
+
+```bash
+python3 scripts/train_sb3.py --list-versions
+python3 scripts/eval_sb3.py dummy_model --list-versions
+```
+
 Train on a fixed map:
 
 ```bash
-python3 scripts/train_sb3.py --env-id safe --total-timesteps 100000 --num-envs 4
+python3 scripts/train_sb3.py --env-id safe --observation-version 1 --reward-version 1 --total-timesteps 100000 --num-envs 4
 ```
 
 Train on random maps:
 
 ```bash
-python3 scripts/train_sb3.py --env-id standard --total-timesteps 300000 --num-envs 4
+python3 scripts/train_sb3.py --env-id standard --observation-version 1 --reward-version 1 --total-timesteps 300000 --num-envs 4
 ```
 
 Evaluate a saved model:
 
 ```bash
-python3 scripts/eval_sb3.py trained_agents/<run_name>/final_model --env-id sneaky_enemies --episodes 3
+python3 scripts/eval_sb3.py trained_agents/<run_name>/final_model --env-id sneaky_enemies --observation-version 1 --reward-version 1 --episodes 3
 ```
 
 Render evaluation:
 
 ```bash
-python3 scripts/eval_sb3.py trained_agents/<run_name>/final_model --env-id sneaky_enemies --episodes 3 --render --delay 0.15
+python3 scripts/eval_sb3.py trained_agents/<run_name>/final_model --env-id sneaky_enemies --observation-version 1 --reward-version 1 --episodes 3 --render --delay 0.15
 ```
+
+Training saves checkpoints and a final model into the chosen `--save-dir` (default: `trained_agents/`).
+
+If you are working on your own observation/reward combination, replace the version numbers below with your pair and
+use a custom run name so your outputs stay separate:
+
+```bash
+python3 scripts/train_sb3.py --env-id standard --observation-version <obs_version> --reward-version <reward_version> --total-timesteps 100000 --run-name obs<obs_version>_rew<reward_version>
+python3 scripts/eval_sb3.py trained_agents/obs<obs_version>_rew<reward_version>/final_model --env-id safe --observation-version <obs_version> --reward-version <reward_version> --episodes 3
+```
+
+For a very small smoke test after changing your observation or reward code, use a shorter run such as:
+
+```bash
+python3 scripts/train_sb3.py --env-id standard --observation-version <obs_version> --reward-version <reward_version> --total-timesteps 32 --num-envs 1 --n-steps 8 --batch-size 4 --run-name smoke_obs<obs_version>_rew<reward_version>
+```
+
+For experiment sweeps and plot generation, see [experiments/README.md](experiments/README.md).
 
 ## Rules
 
@@ -69,7 +94,7 @@ There are three ways of defining the map layouts to be used:
 
 ### Standard maps
 
-Five standard maps are included in the `\coverage_gridworld\__init.py__` file: 
+Five standard maps are included in the `coverage-gridworld/coverage_gridworld/__init__.py` file: 
 - `just_go`: very easy difficulty map, 0 enemies and barely any walls, a simple validation test for algorithms,
 - `safe`: easy difficulty map, 0 enemies and many walls,
 - `maze`: medium difficulty map, 2 enemies and focuses mostly on movement,
@@ -131,8 +156,8 @@ The action is discrete in the range `{0, 4}`.
 
 ### Observation Space
 
-The Observation Space must be implemented on the `custom.py` file. An example is already given, but we **HIGHLY** 
-recommend that a simpler observation be used instead.
+Observation-space versions are implemented in `coverage-gridworld/coverage_gridworld/custom.py` and selected with
+the `--observation-version` flag in the SB3 helper scripts.
 
 ### Starting State
 The episode starts with the agent at the top-left tile `(0, 0)`, with that tile already explored.
@@ -141,7 +166,8 @@ The episode starts with the agent at the top-left tile `(0, 0)`, with that tile 
 The transitions are deterministic. 
 
 ### Rewards
-The reward scheme must be implemented on the `custom.py` file, penalizing or rewarding certain
+Reward versions are implemented in `coverage-gridworld/coverage_gridworld/custom.py` and selected with the
+`--reward-version` flag in the SB3 helper scripts. Each reward function can penalize or reward certain
 behaviors (e.g. hitting a wall, not moving, walking over an explored cell, etc.). The `info` dictionary returned
 by the step method may be used for that. Note that not all values within the `info` dictionary need to be used.
 

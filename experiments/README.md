@@ -35,6 +35,14 @@ python3 experiments/run_experiments.py --observations 1 --rewards 1 --total-time
 python3 experiments/plot_results.py
 ```
 
+If you only want to test your own combination after changing one observation space or reward function, run just that
+pair:
+
+```bash
+python3 experiments/run_experiments.py --observations 2 --rewards 3 --total-timesteps 4096
+python3 experiments/plot_results.py
+```
+
 Run the full 3x3 matrix:
 
 ```bash
