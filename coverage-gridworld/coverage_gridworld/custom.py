@@ -326,21 +326,21 @@ def reward2(info: dict) -> float:
 
     # exploration
     if new_cell_covered:
-        reward += 3.0
+        reward += 5.0
     else:
-        reward -= 0.3  # penalize revisits
-
+        reward -= 0.2  # penalize revisits
+        
     # proximity to enemies (Manhattan distance)
     for enemy in enemies:
         dist = abs(agent_cell[0] - enemy.y) + abs(agent_cell[1] - enemy.x)
 
         if dist <= 2:
-            reward -= 1.0  # danger zone
+            reward -= 0.3  # danger zone
         else:
-            reward += 0.05  # safe movement bonus
+            reward += 0.02  # safe movement bonus
 
     # time penalty
-    reward -= 0.05
+    reward -= 0.1
 
     return reward
 
