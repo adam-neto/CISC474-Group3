@@ -81,6 +81,7 @@ def reward(info: dict) -> float:
 
 
 # JEREMY
+
 def observation_space1(env: gym.Env) -> gym.spaces.Space:
     grid_size = env.grid_size
     obs_size = grid_size * grid_size
@@ -265,6 +266,21 @@ def reward2(info: dict) -> float:
 
     return reward
 
+
+# ENQI
+
+def observation_space3(env: gym.Env) -> gym.spaces.Space:
+    grid_size = env.grid_size
+    obs_size = grid_size * grid_size
+
+    return gym.spaces.Box(
+        low=0,
+        high=6,
+        shape=(obs_size,),
+        dtype=np.float32,
+    )
+
+
 def observation3(grid: np.ndarray):
     grid_size = grid.shape[0]
     simplified_grid = np.zeros((grid_size, grid_size), dtype=np.float32)
@@ -289,6 +305,7 @@ def observation3(grid: np.ndarray):
                 simplified_grid[i, j] = 6
 
     return simplified_grid.flatten()
+
 
 def reward3(info: dict) -> float:
     enemies = info["enemies"]
