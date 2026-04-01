@@ -43,31 +43,6 @@ def load_results():
             key = (obs_version, reward_version, item["map_id"])
             data.setdefault(key, []).append((item["step"], item["summary"]["mean_coverage"]))
 
-    # Backward compatibility for older per-checkpoint result files.
-    for result_path in RESULTS_DIR.glob("obs*_rew*/*.json"):
-        combo_name = result_path.parent.name
-        parts = combo_name.replace("obs", "").split("_rew")
-        obs_version = int(parts[0])
-        reward_version = int(parts[1])
-
-        try:
-            with result_path.open("r", encoding="utf-8") as handle:
-                payload = json.load(handle)
-        except json.JSONDecodeError:
-            malformed_files.append(result_path)
-            continue
-
-        model_name, map_id = result_path.stem.split("__", 1)
-        if model_name.startswith("checkpoint_"):
-            step = int(model_name.split("_", 1)[1])
-        elif model_name.startswith("final_"):
-            step = int(model_name.split("_", 1)[1])
-        else:
-            continue
-
-        key = (obs_version, reward_version, map_id)
-        data.setdefault(key, []).append((step, payload["summary"]["mean_coverage"]))
-
     for key in data:
         data[key] = sorted(set(data[key]), key=lambda item: item[0])
 
@@ -78,7 +53,10 @@ def main():
     args = parse_args()
     data, malformed_files = load_results()
     if not data:
-        raise SystemExit("No valid result files were found in experiments/results.")
+        raise SystemExit(
+            "No valid aggregate result files were found in experiments/results. "
+            "Run experiments/run_experiments.py to generate obsX_rewY.json files."
+        )
 
     max_step = max(points[-1][0] for points in data.values() if points)
     output_path = Path(args.output)

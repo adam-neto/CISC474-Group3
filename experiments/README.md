@@ -17,7 +17,7 @@ Layout:
 - `run_experiments.py`: trains runs and aggregates checkpoint evaluations
 - `plot_results.py`: builds the 3x3 coverage plot grid
 - `models/`: saved agents for experiment runs
-- `results/`: one JSON summary per observation/reward combination
+- `results/`: one JSON summary per observation/reward combination, such as `obs1_rew2.json`
 - `plots/`: generated figures
 
 Notes:
@@ -26,6 +26,7 @@ Notes:
 - Coverage percentage is the primary metric for plotting.
 - The default training environment is `standard`.
 - The default experiment workflow saves checkpoints every 100 timesteps and evaluates each checkpoint once per map.
+- The current plot workflow reads the aggregate `obsX_rewY.json` files in `results/`.
 - Generated files under `models/`, `results/`, and `plots/` are ignored by Git.
 
 Typical workflow:
