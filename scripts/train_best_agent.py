@@ -16,14 +16,16 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 
 
-custom.ACTIVE_OBSERVATION_SPACE = 1
-custom.ACTIVE_OBSERVATION = 1
-custom.ACTIVE_REWARD = 1
+custom.ACTIVE_OBSERVATION_SPACE = 2
+custom.ACTIVE_OBSERVATION = 2
+custom.ACTIVE_REWARD = 2
+
+AGENT_NAME = "best_agent_v1"
+TOTAL_TIME_STEPS = 20_000
 
 
 def train():
     env_id = "sneaky_enemies"
-    
     n_envs = 4 
     
     train_env = make_vec_env(
@@ -35,28 +37,27 @@ def train():
         }
     )
 
-    # PPO Optimized for CPU & Local Observation
     model = PPO(
         "MlpPolicy",
         train_env,
         verbose=1,
-        learning_rate=3e-4,
-        n_steps=512,
-        batch_size=64,
-        ent_coef=0.01,
-        policy_kwargs={"net_arch": [128, 128]},
+        learning_rate=1e-3, 
+        ent_coef=0.1, 
+        n_steps=1024, 
+        batch_size=128,
+        policy_kwargs={"net_arch": dict(pi=[256, 256], qf=[256, 256])},
         tensorboard_log="./logs/"
     )
 
-    print("Training the agent on CPU.")
-    model.learn(total_timesteps=20_000)
+    print(f"Training '{AGENT_NAME}'...")
+    model.learn(total_timesteps=TOTAL_TIME_STEPS) 
     
-    model.save("best_agent_v1")
-    print("Completed. Saved as 'best_agent_v1.zip'")
+    model.save(AGENT_NAME)
+    print(f"Completed. Agent saved as '{AGENT_NAME}'.zip.")
 
 if __name__ == "__main__":
     train()
 
 
 # RUN WITH 
-# python scripts/eval_sb3.py best_agent_v1.zip --observation-version 1 --reward-version 1 --render --episodes 50 --map-index 2
+# python scripts/eval_sb3.py best_agent_v1.zip --observation-version 1 --reward-version 1 --render --episodes 50
