@@ -4,6 +4,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import gymnasium as gym
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_PACKAGE_ROOT = PROJECT_ROOT / "coverage-gridworld"
 if str(LOCAL_PACKAGE_ROOT) not in sys.path:
@@ -22,6 +24,12 @@ def str2bool(value: str) -> bool:
     if normalized in {"0", "false", "f", "no", "n", "off"}:
         return False
     raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
+
+
+def parse_map_list(raw_value: str | None) -> list[str]:
+    if not raw_value:
+        return []
+    return [part.strip() for part in raw_value.split(",") if part.strip()]
 
 
 def parse_args():
@@ -54,6 +62,11 @@ def parse_args():
         help="Number of parallel environments used during training.",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
+    parser.add_argument(
+        "--map-list",
+        default=None,
+        help="Optional comma-separated list of registered fixed-map env IDs to cycle through for training/eval.",
+    )
     parser.add_argument(
         "--learning-rate",
         type=float,
@@ -185,10 +198,27 @@ def save_run_metadata(run_dir: Path, args):
         json.dump(metadata, handle, indent=2)
 
 
+def resolve_predefined_maps(map_ids: list[str]):
+    if not map_ids:
+        return None
+
+    predefined_maps = []
+    for map_id in map_ids:
+        spec = gym.spec(map_id)
+        predefined_map = spec.kwargs.get("predefined_map")
+        if predefined_map is None:
+            raise ValueError(
+                f"Environment '{map_id}' does not define a fixed predefined_map and cannot be used in --map-list."
+            )
+        predefined_maps.append(predefined_map)
+
+    return predefined_maps
+
+
 def build_vec_env(make_vec_env, Monitor, args, training: bool):
     from stable_baselines3.common.vec_env import VecFrameStack, VecNormalize
 
-    env_kwargs = {"render_mode": None, "predefined_map_list": None}
+    env_kwargs = {"render_mode": None, "predefined_map_list": resolve_predefined_maps(parse_map_list(args.map_list))}
     n_envs = args.num_envs if training else 1
     seed = args.seed if training else args.seed + 10_000
 
@@ -324,6 +354,8 @@ def main():
         f"observation={custom.ACTIVE_OBSERVATION},",
         f"reward={custom.ACTIVE_REWARD}",
     )
+    if args.map_list:
+        print(f"Using rotating predefined map list: {parse_map_list(args.map_list)}")
     run_dir = make_run_dir(args.save_dir, args.env_id, args.run_name)
     tb_dir = run_dir / "tensorboard"
     checkpoints_dir = run_dir / "checkpoints"

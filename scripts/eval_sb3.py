@@ -26,6 +26,29 @@ def str2bool(value: str) -> bool:
     raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
 
 
+def parse_map_list(raw_value: str | None) -> list[str]:
+    if not raw_value:
+        return []
+    return [part.strip() for part in raw_value.split(",") if part.strip()]
+
+
+def resolve_predefined_maps(map_ids: list[str]):
+    if not map_ids:
+        return None
+
+    predefined_maps = []
+    for map_id in map_ids:
+        spec = gym.spec(map_id)
+        predefined_map = spec.kwargs.get("predefined_map")
+        if predefined_map is None:
+            raise ValueError(
+                f"Environment '{map_id}' does not define a fixed predefined_map and cannot be used in --map-list."
+            )
+        predefined_maps.append(predefined_map)
+
+    return predefined_maps
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Evaluate a saved PPO agent on the Coverage Gridworld environment."
@@ -50,6 +73,11 @@ def parse_args():
         type=int,
         default=custom.ACTIVE_REWARD,
         help="Reward version to activate from custom.py.",
+    )
+    parser.add_argument(
+        "--map-list",
+        default=None,
+        help="Optional comma-separated list of registered fixed-map env IDs to cycle through during evaluation.",
     )
     parser.add_argument("--episodes", type=int, default=3, help="Number of episodes to run.")
     parser.add_argument(
@@ -168,10 +196,16 @@ def main():
         f"observation={custom.ACTIVE_OBSERVATION},",
         f"reward={custom.ACTIVE_REWARD}",
     )
+    if args.map_list:
+        print(f"Using rotating predefined map list: {parse_map_list(args.map_list)}")
     deterministic = not args.stochastic
     render_mode = "human" if args.render else None
 
-    env = gym.make(args.env_id, render_mode=render_mode, predefined_map_list=None)
+    env = gym.make(
+        args.env_id,
+        render_mode=render_mode,
+        predefined_map_list=resolve_predefined_maps(parse_map_list(args.map_list)),
+    )
     env = Monitor(env)
     vec_env = DummyVecEnv([lambda: env])
 
