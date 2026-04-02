@@ -3,9 +3,9 @@ import gymnasium as gym
 from dataclasses import dataclass
 
 # Choose which versions are active
-ACTIVE_OBSERVATION_SPACE = 1
-ACTIVE_OBSERVATION = 1
-ACTIVE_REWARD = 1
+ACTIVE_OBSERVATION_SPACE = 2
+ACTIVE_OBSERVATION = 2
+ACTIVE_REWARD = 2
 
 # Default environement variables
 DEFAULT_GRID_SIZE = 10
@@ -326,16 +326,16 @@ def reward2(info: dict) -> float:
 
     # exploration
     if new_cell_covered:
-        reward += 5.0
+        reward += 10.0
     else:
-        reward -= 0.2  # penalize revisits
+        reward -= 1.0  # penalize revisits
         
     # proximity to enemies (Manhattan distance)
     for enemy in enemies:
         dist = abs(agent_cell[0] - enemy.y) + abs(agent_cell[1] - enemy.x)
 
         if dist <= 2:
-            reward -= 0.3  # danger zone
+            reward -= 0.1  # danger zone
         else:
             reward += 0.02  # safe movement bonus
 
