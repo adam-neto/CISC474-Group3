@@ -46,6 +46,12 @@ Train on random maps:
 python3 scripts/train_sb3.py --env-id standard --observation-version 1 --reward-version 1 --total-timesteps 300000 --num-envs 4
 ```
 
+Train on multiple maps:
+
+```bash
+python3 scripts/curriculum_train_sb3.py --stage safe:50000:safe --stage medium:20000:standard --stage hard:30000:sneaky_enemies --observation-version 2  --reward-version 2 --num-envs 4
+```
+
 Evaluate a saved model:
 
 ```bash
