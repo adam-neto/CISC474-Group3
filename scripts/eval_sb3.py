@@ -15,6 +15,17 @@ import coverage_gridworld  # noqa: F401 - registers the env IDs with Gymnasium
 from coverage_gridworld import custom
 
 
+def str2bool(value: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Evaluate a saved PPO agent on the Coverage Gridworld environment."
@@ -41,6 +52,23 @@ def parse_args():
         help="Reward version to activate from custom.py.",
     )
     parser.add_argument("--episodes", type=int, default=3, help="Number of episodes to run.")
+    parser.add_argument(
+        "--frame-stack",
+        type=int,
+        default=4,
+        help="Number of observations to stack together. Must match training if frame stacking was used.",
+    )
+    parser.add_argument(
+        "--vecnormalize-path",
+        default=None,
+        help="Optional path to VecNormalize statistics (.pkl). If omitted, the script tries to infer it.",
+    )
+    parser.add_argument(
+        "--normalize-observations",
+        type=str2bool,
+        default=True,
+        help="Whether to wrap the evaluation env with observation normalization when no stats file is found.",
+    )
     parser.add_argument(
         "--stochastic",
         action="store_true",
@@ -102,6 +130,25 @@ def available_versions():
     return observations, rewards
 
 
+def infer_vecnormalize_path(model_path: str) -> Path | None:
+    path = Path(model_path)
+    candidates = []
+
+    if path.suffix == ".zip":
+        candidates.append(path.with_name("best_vecnormalize.pkl" if path.stem == "best_model" else "vecnormalize.pkl"))
+        candidates.append(path.with_name("vecnormalize.pkl"))
+        candidates.append(path.with_name("best_vecnormalize.pkl"))
+    else:
+        candidates.append(path.parent / ("best_vecnormalize.pkl" if path.name == "best_model" else "vecnormalize.pkl"))
+        candidates.append(path.parent / "vecnormalize.pkl")
+        candidates.append(path.parent / "best_vecnormalize.pkl")
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def main():
     args = parse_args()
     if args.list_versions:
@@ -111,6 +158,8 @@ def main():
         return
 
     from stable_baselines3 import PPO
+    from stable_baselines3.common.monitor import Monitor
+    from stable_baselines3.common.vec_env import DummyVecEnv, VecFrameStack, VecNormalize
 
     configure_custom_versions(args)
     print(
@@ -123,21 +172,43 @@ def main():
     render_mode = "human" if args.render else None
 
     env = gym.make(args.env_id, render_mode=render_mode, predefined_map_list=None)
+    env = Monitor(env)
+    vec_env = DummyVecEnv([lambda: env])
+
+    if args.frame_stack > 1:
+        vec_env = VecFrameStack(vec_env, n_stack=args.frame_stack)
+
+    resolved_vecnormalize_path = None
+    if args.vecnormalize_path:
+        resolved_vecnormalize_path = Path(args.vecnormalize_path)
+    else:
+        resolved_vecnormalize_path = infer_vecnormalize_path(args.model_path)
+
+    if resolved_vecnormalize_path is not None and resolved_vecnormalize_path.exists():
+        vec_env = VecNormalize.load(str(resolved_vecnormalize_path), vec_env)
+        vec_env.training = False
+        vec_env.norm_reward = False
+        print(f"Loaded VecNormalize statistics from: {resolved_vecnormalize_path}")
+    elif args.normalize_observations:
+        vec_env = VecNormalize(vec_env, training=False, norm_obs=True, norm_reward=False)
+        print("No VecNormalize statistics found; using fresh observation normalization wrapper.")
+
     model = PPO.load(args.model_path)
     episode_summaries = []
 
     for episode in range(1, args.episodes + 1):
-        obs, _ = env.reset(seed=args.seed + episode - 1)
+        vec_env.seed(args.seed + episode - 1)
+        obs = vec_env.reset()
         done = False
         episode_reward = 0.0
         final_info = {}
 
         while not done:
             action, _ = model.predict(obs, deterministic=deterministic)
-            obs, reward, terminated, truncated, info = env.step(action)
-            episode_reward += reward
-            final_info = info
-            done = terminated or truncated
+            obs, rewards, dones, infos = vec_env.step(action)
+            episode_reward += float(rewards[0])
+            final_info = infos[0]
+            done = bool(dones[0])
 
             if args.render and args.delay > 0:
                 time.sleep(args.delay)
@@ -177,7 +248,7 @@ def main():
             f"game_over={game_over}"
         )
 
-    env.close()
+    vec_env.close()
 
     if args.output_json:
         output_path = Path(args.output_json)

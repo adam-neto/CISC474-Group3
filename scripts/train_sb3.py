@@ -13,6 +13,17 @@ import coverage_gridworld  # noqa: F401 - registers the env IDs with Gymnasium
 from coverage_gridworld import custom
 
 
+def str2bool(value: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Train a PPO agent on the Coverage Gridworld environment with Stable Baselines3."
@@ -64,6 +75,38 @@ def parse_args():
     parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor.")
     parser.add_argument("--gae-lambda", type=float, default=0.95, help="GAE lambda.")
     parser.add_argument("--ent-coef", type=float, default=0.01, help="Entropy bonus coefficient.")
+    parser.add_argument("--clip-range", type=float, default=0.2, help="PPO clip range.")
+    parser.add_argument("--n-epochs", type=int, default=10, help="Number of PPO epochs per update.")
+    parser.add_argument(
+        "--frame-stack",
+        type=int,
+        default=4,
+        help="Number of observations to stack together. Helps local observations retain short-term memory.",
+    )
+    parser.add_argument(
+        "--normalize-observations",
+        type=str2bool,
+        default=True,
+        help="Whether to normalize observations with VecNormalize (true/false).",
+    )
+    parser.add_argument(
+        "--normalize-rewards",
+        type=str2bool,
+        default=True,
+        help="Whether to normalize rewards with VecNormalize during training (true/false).",
+    )
+    parser.add_argument(
+        "--eval-freq",
+        type=int,
+        default=50_000,
+        help="Run evaluation every N timesteps. Set to 0 to disable periodic evaluation.",
+    )
+    parser.add_argument(
+        "--eval-episodes",
+        type=int,
+        default=10,
+        help="Number of episodes to run during each evaluation pass.",
+    )
     parser.add_argument(
         "--checkpoint-freq",
         type=int,
@@ -142,6 +185,124 @@ def save_run_metadata(run_dir: Path, args):
         json.dump(metadata, handle, indent=2)
 
 
+def build_vec_env(make_vec_env, Monitor, args, training: bool):
+    from stable_baselines3.common.vec_env import VecFrameStack, VecNormalize
+
+    env_kwargs = {"render_mode": None, "predefined_map_list": None}
+    n_envs = args.num_envs if training else 1
+    seed = args.seed if training else args.seed + 10_000
+
+    vec_env = make_vec_env(
+        args.env_id,
+        n_envs=n_envs,
+        seed=seed,
+        env_kwargs=env_kwargs,
+        wrapper_class=Monitor,
+    )
+
+    if args.frame_stack > 1:
+        vec_env = VecFrameStack(vec_env, n_stack=args.frame_stack)
+
+    if args.normalize_observations or args.normalize_rewards:
+        vec_env = VecNormalize(
+            vec_env,
+            training=training,
+            norm_obs=args.normalize_observations,
+            norm_reward=args.normalize_rewards and training,
+        )
+
+    return vec_env
+
+
+class CoverageEvalCallback:
+    def __init__(self, model, train_env, eval_env, run_dir: Path, eval_freq: int, eval_episodes: int):
+        from stable_baselines3.common.callbacks import BaseCallback
+
+        class _InnerCallback(BaseCallback):
+            def __init__(self, outer):
+                super().__init__()
+                self.outer = outer
+
+            def _on_step(self) -> bool:
+                if self.outer.eval_freq <= 0 or self.num_timesteps % self.outer.eval_freq != 0:
+                    return True
+                self.outer.evaluate()
+                return True
+
+        self.callback = _InnerCallback(self)
+        self.model = model
+        self.train_env = train_env
+        self.eval_env = eval_env
+        self.run_dir = run_dir
+        self.eval_freq = eval_freq
+        self.eval_episodes = eval_episodes
+        self.best_mean_coverage = float("-inf")
+
+    def evaluate(self):
+        from stable_baselines3.common.vec_env import VecNormalize, sync_envs_normalization
+
+        if isinstance(self.train_env, VecNormalize) and isinstance(self.eval_env, VecNormalize):
+            sync_envs_normalization(self.train_env, self.eval_env)
+
+        rewards = []
+        coverages = []
+        completions = 0
+        deaths = 0
+
+        for episode in range(self.eval_episodes):
+            obs = self.eval_env.reset()
+            done = False
+            episode_reward = 0.0
+            final_info = {}
+
+            while not done:
+                action, _ = self.model.predict(obs, deterministic=True)
+                obs, reward, dones, infos = self.eval_env.step(action)
+                episode_reward += float(reward[0])
+                done = bool(dones[0])
+                if infos:
+                    final_info = infos[0]
+
+            coverable_cells = int(final_info.get("coverable_cells", 0))
+            total_covered_cells = int(final_info.get("total_covered_cells", 0))
+            game_over = bool(final_info.get("game_over", False))
+            completed = coverable_cells > 0 and total_covered_cells == coverable_cells
+            coverage = 0.0
+            if coverable_cells:
+                coverage = 100.0 * total_covered_cells / coverable_cells
+
+            rewards.append(episode_reward)
+            coverages.append(coverage)
+            completions += int(completed)
+            deaths += int(game_over)
+
+        mean_reward = sum(rewards) / len(rewards)
+        mean_coverage = sum(coverages) / len(coverages)
+        completion_rate = completions / len(coverages)
+        death_rate = deaths / len(coverages)
+
+        self.callback.logger.record("eval/mean_reward", mean_reward)
+        self.callback.logger.record("eval/mean_coverage", mean_coverage)
+        self.callback.logger.record("eval/completion_rate", completion_rate)
+        self.callback.logger.record("eval/death_rate", death_rate)
+
+        print(
+            f"[eval] steps={self.callback.num_timesteps} "
+            f"mean_reward={mean_reward:.2f} "
+            f"mean_coverage={mean_coverage:.1f}% "
+            f"completion_rate={completion_rate:.2%} "
+            f"death_rate={death_rate:.2%}"
+        )
+
+        if mean_coverage > self.best_mean_coverage:
+            self.best_mean_coverage = mean_coverage
+            best_model_path = self.run_dir / "best_model"
+            self.model.save(str(best_model_path))
+            if isinstance(self.train_env, VecNormalize):
+                self.train_env.save(str(self.run_dir / "best_vecnormalize.pkl"))
+            print(f"Saved new best model to: {best_model_path}.zip")
+
+
 def main():
     args = parse_args()
     if args.list_versions:
@@ -151,9 +312,10 @@ def main():
         return
 
     from stable_baselines3 import PPO
-    from stable_baselines3.common.callbacks import CheckpointCallback
+    from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.monitor import Monitor
+    from stable_baselines3.common.vec_env import VecNormalize
 
     configure_custom_versions(args)
     print(
@@ -171,14 +333,8 @@ def main():
 
     save_run_metadata(run_dir, args)
 
-    env_kwargs = {"render_mode": None, "predefined_map_list": None}
-    vec_env = make_vec_env(
-        args.env_id,
-        n_envs=args.num_envs,
-        seed=args.seed,
-        env_kwargs=env_kwargs,
-        wrapper_class=Monitor,
-    )
+    vec_env = build_vec_env(make_vec_env, Monitor, args, training=True)
+    eval_env = build_vec_env(make_vec_env, Monitor, args, training=False) if args.eval_freq > 0 else None
 
     checkpoint_callback = CheckpointCallback(
         save_freq=max(args.checkpoint_freq // args.num_envs, 1),
@@ -197,16 +353,36 @@ def main():
         gamma=args.gamma,
         gae_lambda=args.gae_lambda,
         ent_coef=args.ent_coef,
+        clip_range=args.clip_range,
+        n_epochs=args.n_epochs,
         tensorboard_log=str(tb_dir),
         policy_kwargs={"net_arch": [256, 256]},
     )
 
+    callbacks = [checkpoint_callback]
+    if eval_env is not None:
+        coverage_eval = CoverageEvalCallback(
+            model=model,
+            train_env=vec_env,
+            eval_env=eval_env,
+            run_dir=run_dir,
+            eval_freq=args.eval_freq,
+            eval_episodes=args.eval_episodes,
+        )
+        callbacks.append(coverage_eval.callback)
+
     print(f"Training PPO on '{args.env_id}' with {args.num_envs} parallel environments.")
     print(f"Run artifacts will be saved to: {run_dir}")
+    print(
+        "Training wrappers:",
+        f"frame_stack={args.frame_stack},",
+        f"normalize_observations={args.normalize_observations},",
+        f"normalize_rewards={args.normalize_rewards}",
+    )
 
     model.learn(
         total_timesteps=args.total_timesteps,
-        callback=checkpoint_callback,
+        callback=CallbackList(callbacks),
         progress_bar=args.progress_bar,
     )
 
@@ -214,7 +390,14 @@ def main():
     model.save(str(final_model_path))
     print(f"Final model saved to: {final_model_path}.zip")
 
+    if isinstance(vec_env, VecNormalize):
+        vecnormalize_path = run_dir / "vecnormalize.pkl"
+        vec_env.save(str(vecnormalize_path))
+        print(f"Saved VecNormalize statistics to: {vecnormalize_path}")
+
     vec_env.close()
+    if eval_env is not None:
+        eval_env.close()
 
 
 if __name__ == "__main__":
