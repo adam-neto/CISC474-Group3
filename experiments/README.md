@@ -24,8 +24,8 @@ Notes:
 
 - The experiment scripts use the same `--observation-version` and `--reward-version` flags as the main SB3 scripts.
 - Coverage percentage is the primary metric for plotting.
-- The default training environment is `standard`.
-- The default experiment workflow saves checkpoints every 100 timesteps and evaluates each checkpoint once per map.
+- The default training environment is `standard`, which means each observation/reward pair is trained once on random maps and then evaluated on each map listed in `--maps`.
+- The script default for `--checkpoint-freq` is `100`, but larger values such as `50000` are more practical for long report-scale runs.
 - The current plot workflow reads the aggregate `obsX_rewY.json` files in `results/`.
 - Generated files under `models/`, `results/`, and `plots/` are ignored by Git.
 
@@ -33,6 +33,13 @@ Typical workflow:
 
 ```bash
 python3 experiments/run_experiments.py --observations 1 --rewards 1 --total-timesteps 100000
+python3 experiments/plot_results.py
+```
+
+Report-scale workflow:
+
+```bash
+python3 experiments/run_experiments.py --observations 1,2,3 --rewards 1,2,3 --total-timesteps 1000000 --checkpoint-freq 50000
 python3 experiments/plot_results.py
 ```
 
