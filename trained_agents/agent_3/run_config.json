@@ -1,0 +1,22 @@
+{
+  "env_id": "standard",
+  "observation_version": 1,
+  "reward_version": 1,
+  "total_timesteps": 300000,
+  "num_envs": 4,
+  "seed": 42,
+  "learning_rate": 0.0003,
+  "n_steps": 1024,
+  "batch_size": 256,
+  "gamma": 0.99,
+  "gae_lambda": 0.95,
+  "ent_coef": 0.01,
+  "checkpoint_freq": 50000,
+  "save_dir": "trained_agents",
+  "run_name": null,
+  "progress_bar": false,
+  "list_versions": false,
+  "active_observation_space": 1,
+  "active_observation": 1,
+  "active_reward": 1
+}

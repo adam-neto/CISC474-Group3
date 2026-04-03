@@ -1,0 +1,26 @@
+{
+  "stage": [
+    "safe:20000:safe",
+    "easy:20000:maze",
+    "medium:30000:standard",
+    "hard:20000:sneaky_enemies"
+  ],
+  "env_id": "curriculum",
+  "observation_version": 2,
+  "reward_version": 2,
+  "num_envs": 4,
+  "seed": 42,
+  "learning_rate": 0.0003,
+  "n_steps": 1024,
+  "batch_size": 256,
+  "gamma": 0.99,
+  "gae_lambda": 0.95,
+  "ent_coef": 0.01,
+  "checkpoint_freq": 50000,
+  "save_dir": "trained_agents",
+  "run_name": null,
+  "progress_bar": false,
+  "active_observation_space": 2,
+  "active_observation": 2,
+  "active_reward": 2
+}
